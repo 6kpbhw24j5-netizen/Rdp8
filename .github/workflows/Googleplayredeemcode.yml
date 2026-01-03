@@ -1,0 +1,24 @@
+name: Google Play Redeem Code Automation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  buy_redeem_code:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Run redeem code generation script
+        run: python3 generate_redeem_code.py
