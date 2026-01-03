@@ -1,0 +1,34 @@
+name: Generate Python PIN
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  generate-pin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run generatepin4.py to generate PIN
+        id: generate_pin
+        run: |
+          pin=$(python3 generatepin4.py | grep -oE '[0-9]+')
+          echo "pin=$pin" >> "$GITHUB_OUTPUT"
+
+      - name: Post generated PIN to job summary
+        run: |
+          {
+            echo "## Generated PIN"
+            echo
+            echo '```'
+            echo "${{ steps.generate_pin.outputs.pin }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
