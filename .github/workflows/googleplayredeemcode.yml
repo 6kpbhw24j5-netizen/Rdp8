@@ -1,0 +1,22 @@
+name: Google Play Redeem Checkout
+
+on:
+  workflow_dispatch:
+    inputs:
+      points:
+        description: "User total points"
+        required: true
+        default: "900"
+
+jobs:
+  checkout-redeem:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify points and claim redeem code
+        run: |
+          chmod +x scripts/checkout_redeem.sh
+          ./scripts/checkout_redeem.sh "${{ github.event.inputs.points }}"
