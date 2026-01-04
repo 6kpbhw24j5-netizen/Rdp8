@@ -1,0 +1,118 @@
+name: Kixie Phone Number Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      area_code:
+        description: 'Area code to search for (415 or 650)'
+        required: true
+        default: '415'
+
+jobs:
+  kixie_management:
+    runs-on: ubuntu-latest
+
+    env:
+      KIXIE_API_KEY: ${{ secrets.KIXIE_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Authenticate with Kixie
+        id: authenticate
+        run: |
+          echo "Authenticating with Kixie..."
+          AUTH_RESPONSE=$(curl -s -X POST "https://api.kixie.com/v1/authenticate" \
+            -H "Content-Type: application/json" \
+            -d "{\"api_key\":\"$KIXIE_API_KEY\"}")
+          TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.token')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+            echo "Authentication successful ✅."
+            exit 1
+          fi
+          echo "Authentication successful ✅"
+          echo "TOKEN=$TOKEN" >> $GITHUB_ENV
+
+      - name: Search for available phone number
+        id: search_number
+        run: |
+          AREA_CODE="${{ github.event.inputs.area_code }}"
+          echo "Searching for available Kixie phone numbers in area code $AREA_CODE..."
+          SEARCH_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            "https://api.kixie.com/v1/phone_numbers/available?area_code=$AREA_CODE")
+          NUMBER=$(echo "$SEARCH_RESPONSE" | jq -r '.numbers[0]')
+          if [ -z "$NUMBER" ] || [ "$NUMBER" == "null" ]; then
+            echo "No available numbers found in area code $AREA_CODE."
+            exit 1
+          fi
+          echo "Available number found: $NUMBER"
+          echo "::set-output name=number::$NUMBER"
+
+      - name: Purchase phone number
+        id: purchase_number
+        run: |
+          NUMBER=${{ steps.search_number.outputs.number }}
+          echo "Purchasing phone number $NUMBER..."
+          PURCHASE_RESPONSE=$(curl -s -X POST "https://api.kixie.com/v1/phone_numbers/purchase" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"phone_number\":\"$NUMBER\"}")
+          SUCCESS=$(echo "$PURCHASE_RESPONSE" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Successfully purchased phone number $NUMBER."
+            exit 1
+          fi
+          echo "Successfully purchased phone number $NUMBER."
+
+      - name: Display my Kixie number
+        run: |
+          NUMBER=${{ steps.search_number.outputs.number }}
+          echo "My Kixie number is: +1 $NUMBER (USA)"
+
+      - name: Retrieve SMS history
+        run: |
+          NUMBER=${{ steps.search_number.outputs.number }}
+          echo "Retrieving SMS history for $NUMBER..."
+          SMS_HISTORY=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.kixie.com/v1/phone_numbers/$NUMBER/sms_history")
+          echo "SMS History: $SMS_HISTORY"
+
+      - name: Retrieve activity history
+        run: |
+          NUMBER=${{ steps.search_number.outputs.number }}
+          echo "Retrieving activity history for $NUMBER..."
+          ACTIVITY_HISTORY=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.kixie.com/v1/phone_numbers/$NUMBER/activity_history")
+          echo "Activity History: $ACTIVITY_HISTORY"
+
+      - name: Manage Team SMS
+        run: |
+          echo "Fetching Team SMS..."
+          TEAM_SMS=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.kixie.com/v1/team/sms")
+          echo "Team SMS: $TEAM_SMS"
+
+      - name: Check account balance
+        run: |
+          BALANCE_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.kixie.com/v1/account/balance")
+          BALANCE=$(echo "$BALANCE_RESPONSE" | jq -r '.balance')
+          echo "Current account balance: $BALANCE"
+
+      - name: Complete checkout if balance low
+        run: |
+          BALANCE=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.kixie.com/v1/account/balance" | jq -r '.balance')
+          THRESHOLD=1.00
+          echo "Balance is $BALANCE, threshold is $THRESHOLD"
+          if (( $(echo "$BALANCE < $THRESHOLD" | bc -l) )); then
+            echo "Balance below threshold, completing checkout..."
+            CHECKOUT_RESPONSE=$(curl -s -X POST "https://api.kixie.com/v1/account/checkout" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"amount":10.00}')
+            echo "Checkout response: $CHECKOUT_RESPONSE"
+          else
+            echo "Balance sufficient, no checkout needed."
+          fi
+
+      - name: Complete job and start building
+        run: |
+          echo "Kixie number purchase and management job complete."
+          echo "Ready to start building integrations and workflows."
